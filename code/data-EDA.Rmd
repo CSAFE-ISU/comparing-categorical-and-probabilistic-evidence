@@ -1,0 +1,175 @@
+---
+title: "Comparing Categorical and Probabilistic Fingerprint Evidence - Data Exploration"
+output: html_document
+--- 
+
+# Introduction  
+
+Comparing Categorical and Probabilistic Fingerprint Evidence, by Brandon Garrett, J.D., Gregory Mitchell, J.D., Ph.D., and Nicholas Scurich, Ph.D. appeared in the Journal of Forensic Sciences in November 2018.  
+
+After reading the article as part of CSAFE's Reading Group, some discussion arose about the data collected and whether further insights were possible using that data.  
+
+# Data Cleaning  
+
+The variables in the data set posted online were of the format "QXXX"; thus, we first went through the document with survey questions and investigated the types of responses on each variable in order to determine which information each variable corresponded to. The following columns were identified and renamed:  
+
+### Demographic and Background Variables  
+
+1. `Q588` ->  `JuryYN`: Whether the survey respondent had served as part of a jury before.  
+2. `Q590` ->  `JuryCriminal`:  
+3. `Q592` -> `Sex`: Sex of the survey respondent  
+4. `Q594` -> `Race.Ethnicity`: Race/Ethnicity of the survey respondent  
+5. `Q596_1` -> `Age`: Age of the respondent; changed to numeric from character variable  
+6. `Q598` -> `FamilyIncome`: Household income of survey respondent
+    - less than 10k
+    - $10,000 - $19,999
+    - $20,000 - $29,999
+    - $30,000 - $39,999
+    - $40,000 - $49,999
+    - $50,000 - $59,999
+    - $60,000 - $69,999
+    - $70,000 - $79,999
+    - $80,000 - $89,999
+    - $90,000 - $99,999
+    - $100,000 - $149,999
+    - more than $150,000  
+7. `Q600` -> `Education`: Education level of survey respondent
+    - Less than high school
+    - High school graduate
+    - Some college
+    - 2 year degree
+    - 4 year degree
+    - Professional degree
+    - Doctorate  
+8. `Q602` -> `Vote`: Tendency when voting:
+    - No consistent preference
+    - Republican 
+    - Democrat  
+9. `Q604` -> `PoliticalViews`: Tendency of political views: 
+    - Very Liberal
+    - Somewhat Liberal
+    - Middle of the Road
+    - Somewhat Conservative 
+    - Very Conservative  
+10. `Q606` -> `Arrested`: Whether respondent or a member of their family have been arrested by police
+11. `Q608` -> `Region`: Region of the U.S. survey respondent lives in: 
+    - West
+    - Midwest
+    - South
+    - Northeast  
+12. `Q624` -> `State`: State of the U.S. survey respondent lives in
+13. `ObjectiveNumeracy` -> `ObjectiveNumeracy`: Objective numeracy score based on imbedded numeracy test; changed to numeric from factor variable.  
+14. `CombinedNumberacy` -> `CombinedNumeracy`: Combined numeracy; fixed typo in column name; changed to numeric from factor variable.  
+15. `Q603` -> `ErrorAversion`: Which error the survey respondent believes causes more harm to society: 
+    - Failing to convict a guilty person
+    - Erroneously convicting an innocent person
+    - The errors are equally bad  
+16. `Q644` -> `CaseRate`: How the survey respondent would rate the prosecution's case here: 
+    - Extremely Weak
+    - Weak
+    - Strong
+    - Extremely Strong  
+17. `Q645` -> `FingerReliable`: How reliable the survey respondent thinks fingerprint evidence is: 
+    - Very Reliable
+    - Reliable
+    - Somewhat Reliable
+    - Somewhat Unreliable
+    - Unreliable
+    - Very Unreliable  
+18. `Q665` -> `DNAReliable`: How reliable the survey respondent thinks DNA evidence is:  
+    - Very Reliable
+    - Reliable
+    - Somewhat Reliable
+    - Somewhat Unreliable
+    - Unreliable
+    - Very Unreliable  
+    
+```{r, echo = F, warning = F, message = F}
+library(tidyverse)
+
+data <- readRDS("../data/comparing-cat-and-prob-evidence.rda")
+#names(data)
+#summary(data)
+
+data <- data %>% mutate(JuryYN = Q588, JuryCriminal = Q590, Sex = Q592, Race.Ethnicity = Q594, Age = as.numeric(Q596_1), FamilyIncome = Q598, Education = Q600, Vote = Q602, PoliticalViews = Q604, Arrested = Q606, Region = Q608, State = Q624, ObjectiveNumeracy = as.numeric(ObjectiveNumeracy)-1, CombinedNumeracy = as.numeric(CombinedNumberacy), ErrorAversion = Q603, CaseRate = Q644, FingerReliable = Q645, DNAReliable = Q665)
+
+## Note - translating ObjectiveNumeracy from a factor to a numeric makes "none correct" start at value = 1 rather than value = 0, so I subtracted one from the numeric to make sure that they start at value = 0 for 0 correct.  
+
+```
+
+
+
+### Response Variables  
+
+1. `Q83_1` -> `LeftPrints`: Likelihood that the defendant left his fingerprints on the gun used in the robbery  
+    - Slider from 0-100, 50 represents complete uncertainty as to whether the defendant did or did not hold the gun used
+2. `Q76_1` -> `OtherLeftPrints`: Likelihood that someone other than the defendant left the fingerprints found on the gun  
+    - Slider from 0-100, 50 indicates that it is just as likely that someone other than the defendant left the fingerprints as it is likely that the defendant left the fingerprints  
+3. `Q641_1` -> `CommittedCrime`: Likelihood that the defendant committed the robbery
+    - Slider from 0-100, 50 indicates uncertainty as to whether the defendant did or did not commit the robbery.  
+4. `Q650` -> `Convict`: Whether or not the survey respondent would convict the defendant.  
+
+
+```{r, echo = F, warning = F, message = F}
+data <- data %>% mutate(LeftPrints = Q83_1, OtherLeftPrints = Q76_1, CommittedCrime = Q641_1, Convict = Q650)
+```
+
+
+### Removing Incomplete Responses  
+
+The paper states that there were many respondents who did not pass the quality control checks put in place in the survey; the variable `PassedQC` appears to be an indicator for this check. Thus, respondents were filtered out if they did not pass this check. Our remaining number of respondents, n=858, matches their reported number of responses.  
+
+```{r, echo = F, warning = F, message = F}
+data <- data %>% filter(PassedQC == "Yes")
+
+data <- data %>% select(-c(StartDate:term))
+```
+
+
+# Verifying Reported Linear Model  
+
+The first step after preparing the data file is to first verify the main model that was reported in the paper: 
+"We next examined the contribution of individual difference variables on participants' ratings of the likelihood the defendant left his prints on the gun dropped at the crime scene. We entered into the regression the following possible explanatory variables: **experimental condition, participant sex, age, race/ethnicity, political preference, regional location, prior jury service (yes/no), prior arrest of self or family member (yes/no), numeracy as measured by an objective test of persons' mathematical knowledge, and error aversion**...[T]he model that most efficiently explained variance in ratings on the "left prints" variable contained only **numeracy, error aversion, and age** ($R^2 = 0.06, p < 0.001$)..."  
+
+### Full Model  
+We fit a linear model with `LeftPrints` as the response, and the same explanatory variables the authors indicate in the paper.  
+
+```{r, warning = F, message = F}
+## Full model
+lm.full <- lm(LeftPrints~Condition + Sex + Age + Race.Ethnicity + PoliticalViews + Region + JuryYN + Arrested + ObjectiveNumeracy + ErrorAversion, data = data)
+summary(lm.full)
+anova(lm.full)
+```
+
+First, note that an Analysis of Variance of this regression shows that the inclusion of `Condition`, `Age`, `Race.Ethnicity`, `ObjectiveNumeracy`, and `ErrorAversion` all significantly reduce the unexplained variability in the response variable, `LeftPrints`. This full model has an R-squared value of 0.1031, and an adjusted R-squared value of 0.0727. Given the large number of variables considered here, the adjusted R-squared should be considered over the R-squared value.  
+
+
+### Model with "final" predictors  
+Next, we also fit a linear model with only `ObjectiveNumeracy`, `ErrorAversion`, and `Age` as the explanatory variables.  
+
+```{r, warning = F, message = F}
+lm.final <- lm(LeftPrints~ObjectiveNumeracy + ErrorAversion + Age, data = data)
+summary(lm.final)
+anova(lm.final)
+```
+
+This results in an R-squared value of 0.05408, and an adjusted R-squared value of 0.04964, which are both lower than the authors reported in the paper.  
+
+One reason this discrepancy could exist is if the authors used the `CombinedNumeracy` variable instead of the `ObjectiveNumeracy` variable. We can investigate by fitting a model with `CombinedNumeracy` to see if those numbers are comparable with those reported in the paper.  
+
+```{r, warning = F, message = F}
+lm.final2 <- lm(LeftPrints~CombinedNumeracy + ErrorAversion + Age, data = data)
+summary(lm.final2)
+anova(lm.final2)
+```
+
+This model results in an R-squared value of 0.05995 and an adjusted R-squared of 0.05554; the R-squared of 0.05995 is much more consistent with the $R^2 = 0.06$ reported in the paper.  
+
+# Additional Model Exploration  
+
+# Notes  
+
+- `FamilyIncome` should be represented as something ordinal, rather than just an orderless factor.  
+- `FingerReliable` should also be considered ordinal  
+- `DNAReliable` should also be considered ordinal  
+
